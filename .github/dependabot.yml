@@ -1,0 +1,78 @@
+version: 2
+updates:
+  # 1. Node.js / Vite / Playwright / TypeScript Dependencies
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "03:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 15
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    reviewers:
+      - "dutchkem-devops"
+    groups:
+      npm-patch-updates:
+        applies-to: version-updates
+        update-types:
+          - "patch"
+      npm-minor-updates:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+      npm-major-updates:
+        applies-to: version-updates
+        update-types:
+          - "major"
+    labels:
+      - "dependencies"
+      - "npm"
+
+  # 2. FastAPI / Python QA Agents Backend Dependencies
+  - package-ecosystem: "pip"
+    directory: "/phase13_architecture/backend"
+    schedule:
+      interval: "daily"
+      time: "03:30"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(deps-py)"
+      include: "scope"
+    reviewers:
+      - "dutchkem-devops"
+    groups:
+      pip-patch-updates:
+        applies-to: version-updates
+        update-types:
+          - "patch"
+      pip-minor-updates:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+      pip-major-updates:
+        applies-to: version-updates
+        update-types:
+          - "major"
+    labels:
+      - "dependencies"
+      - "python"
+
+  # 3. GitHub Actions Workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "02:30"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci(deps)"
+    reviewers:
+      - "dutchkem-devops"
+    labels:
+      - "dependencies"
+      - "ci"

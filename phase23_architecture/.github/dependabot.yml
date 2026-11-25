@@ -1,0 +1,35 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "03:00"
+      timezone: "UTC"
+    groups:
+      npm-patch-updates:
+        applies-to: version-updates
+        update-types: ["patch"]
+      npm-minor-updates:
+        applies-to: version-updates
+        update-types: ["minor"]
+      npm-major-updates:
+        applies-to: version-updates
+        update-types: ["major"]
+
+  - package-ecosystem: "pip"
+    directory: "/phase13_architecture/backend"
+    schedule:
+      interval: "daily"
+      time: "03:30"
+      timezone: "UTC"
+    groups:
+      pip-patch-updates:
+        applies-to: version-updates
+        update-types: ["patch"]
+      pip-minor-updates:
+        applies-to: version-updates
+        update-types: ["minor"]
+      pip-major-updates:
+        applies-to: version-updates
+        update-types: ["major"]

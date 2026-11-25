@@ -1,0 +1,115 @@
+name: Zero-Downtime Migration CI (Expand-Contract + Neon Shadow DB)
+
+on:
+  pull_request:
+    paths:
+      - "migrations/**"
+      - "scripts/verify-migrations.mjs"
+      - "src/devops/migrationGuard.ts"
+      - ".github/workflows/migration-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "migrations/**"
+      - "scripts/verify-migrations.mjs"
+      - "src/devops/migrationGuard.ts"
+      - ".github/workflows/migration-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  expand-contract-policy-guard:
+    name: Expand-Contract Policy & Rollback Pair Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enforce Expand-Contract Rules (Never Drop + Add in Same Migration, Require .down.sql)
+        run: node scripts/verify-migrations.mjs
+
+  shadow-db-up-down-up:
+    name: Shadow DB Verification (Apply Up -> Apply Down -> Apply Up)
+    needs: expand-contract-policy-guard
+    runs-on: ubuntu-latest
+    services:
+      shadow_postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: apex_ci
+          POSTGRES_PASSWORD: apex_ci_shadow_password
+          POSTGRES_DB: apex_shadow_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PostgreSQL Client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client curl jq
+
+      - name: Create Ephemeral Neon Shadow Branch (when NEON_API_KEY configured)
+        id: neon_shadow
+        if: env.NEON_API_KEY != '' && env.NEON_PROJECT_ID != ''
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+        run: |
+          BRANCH_NAME="ci-shadow-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          RESP=$(curl -sS -X POST "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches" \
+            -H "Authorization: Bearer ${NEON_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{\"branch\":{\"name\":\"${BRANCH_NAME}\"},\"endpoints\":[{\"type\":\"read_write\"}]}")
+          BRANCH_ID=$(echo "$RESP" | jq -r '.branch.id // empty')
+          SHADOW_URI=$(echo "$RESP" | jq -r '.connection_uris[0].connection_uri // empty')
+          if [ -z "$BRANCH_ID" ] || [ -z "$SHADOW_URI" ]; then
+            echo "Failed to create Neon shadow branch: $RESP"
+            exit 1
+          fi
+          echo "branch_id=$BRANCH_ID" >> "$GITHUB_OUTPUT"
+          echo "::add-mask::$SHADOW_URI"
+          echo "shadow_uri=$SHADOW_URI" >> "$GITHUB_OUTPUT"
+          echo "Created ephemeral Neon shadow branch $BRANCH_NAME ($BRANCH_ID)"
+
+      - name: Execute Migration Cycle (Apply UP -> Apply DOWN -> Apply UP)
+        env:
+          SHADOW_DB_URL: ${{ steps.neon_shadow.outputs.shadow_uri || 'postgresql://apex_ci:apex_ci_shadow_password@127.0.0.1:5432/apex_shadow_db' }}
+        run: |
+          set -euo pipefail
+          echo "=== STEP 1: APPLY UP (Expand -> Migrate -> Contract) ==="
+          for f in $(ls migrations/*.up.sql | sort); do
+            echo "Applying UP: $f"
+            psql "$SHADOW_DB_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+          echo "=== STEP 2: APPLY DOWN (Reverse Rollback) ==="
+          for f in $(ls migrations/*.down.sql | sort -r); do
+            echo "Applying DOWN: $f"
+            psql "$SHADOW_DB_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+          echo "=== STEP 3: RE-APPLY UP (Idempotency Check) ==="
+          for f in $(ls migrations/*.up.sql | sort); do
+            echo "Re-applying UP: $f"
+            psql "$SHADOW_DB_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+          echo "=== VERIFYING FINAL SHADOW SCHEMA TABLES ==="
+          psql "$SHADOW_DB_URL" -v ON_ERROR_STOP=1 -c "\dt"
+          echo "Migration CI check (apply up -> apply down -> apply up) SUCCEEDED."
+
+      - name: Delete Ephemeral Neon Shadow Branch
+        if: always() && steps.neon_shadow.outputs.branch_id != ''
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+          BRANCH_ID: ${{ steps.neon_shadow.outputs.branch_id }}
+        run: |
+          curl -sS -X DELETE "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches/${BRANCH_ID}" \
+            -H "Authorization: Bearer ${NEON_API_KEY}"
+          echo "Deleted ephemeral Neon shadow branch ${BRANCH_ID}"

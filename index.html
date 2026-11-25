@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Dutchkem Ventures Apex Data Copilot</title>
+    <meta name="theme-color" content="#0B1F3A" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="ApexData" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta
+      name="description"
+      content="Multi-tenant AI workforce orchestration platform with PostgreSQL Row-Level Security, white-label agency isolation, and automated 80/20 escrow ledger."
+    />
+    <meta property="og:title" content="Dutchkem Ventures Apex Data Copilot" />
+    <meta
+      property="og:description"
+      content="Multi-tenant AI workforce orchestration platform with PostgreSQL Row-Level Security, white-label agency isolation, and automated 80/20 escrow ledger."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Dutchkem Ventures Apex Data Copilot" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="Dutchkem Ventures Apex Data Copilot"
+    />
+    <meta
+      name="twitter:description"
+      content="Generate synthetic data, verify 24kHz audio SNR, audit YOLOv8 bounding box IoU, and win contracts automatically."
+    />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "name": "Dutchkem Ventures",
+            "description": "AI workforce orchestration platform specializing in automated Audio QA, YOLOv8 Vision QA, Synthetic Speech Data Factories, and multi-tenant escrow settlement."
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "Dutchkem Ventures Apex Data Copilot",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Web",
+            "description": "Multi-tenant AI workforce orchestration platform with PostgreSQL Row-Level Security, Auto-Bidder AI, librosa 24kHz SNR QA, YOLOv8 IoU checks, and automated 80/20 escrow ledger.",
+            "offers": [
+              {
+                "@type": "Offer",
+                "name": "Starter (14-Day Free Trial)",
+                "price": "0",
+                "priceCurrency": "USD"
+              },
+              {
+                "@type": "Offer",
+                "name": "Pro",
+                "price": "49",
+                "priceCurrency": "USD"
+              },
+              {
+                "@type": "Offer",
+                "name": "Agency",
+                "price": "199",
+                "priceCurrency": "USD"
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="bg-[#F8FAFF] text-[#0F172A] antialiased selection:bg-sky-200/70 selection:text-slate-950">
+    <div id="root"></div>
+    <script>
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          for (var i = 0; i < regs.length; i++) {
+            var reg = regs[i];
+            var scriptUrl = (reg.active && reg.active.scriptURL) || (reg.waiting && reg.waiting.scriptURL) || (reg.installing && reg.installing.scriptURL) || "";
+            if (scriptUrl.indexOf("dev-sw") !== -1) {
+              reg.unregister();
+            }
+          }
+        }).catch(function () {});
+      }
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

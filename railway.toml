@@ -1,0 +1,18 @@
+[build]
+builder = "NIXPACKS"
+buildCommand = "npm ci && npm run build"
+
+[deploy]
+startCommand = "NODE_ENV=production npm start"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 30
+overlapSeconds = 30
+drainingSeconds = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
+numReplicas = 2
+
+[environments.production]
+HEALTH_WARMUP_SECONDS = "30"
+USER_SESSION_TTL_SECONDS = "604800"
+NODE_ENV = "production"

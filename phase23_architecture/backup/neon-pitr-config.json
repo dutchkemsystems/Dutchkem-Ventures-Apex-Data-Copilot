@@ -1,0 +1,33 @@
+{
+  "provider": "neon",
+  "projectIdEnvVar": "NEON_PROJECT_ID",
+  "apiKeyEnvVar": "NEON_API_KEY",
+  "primaryBranch": "main",
+  "pitr": {
+    "enabled": true,
+    "historyRetentionDays": 7,
+    "historyRetentionSeconds": 604800,
+    "planTierMinimum": "Launch",
+    "continuousWalStreaming": true,
+    "granularity": "1_second"
+  },
+  "scheduledSnapshots": {
+    "frequency": "daily",
+    "cronUtc": "0 1 * * *",
+    "maxFreshnessGapHours": 24,
+    "alertOnStaleHours": 24
+  },
+  "weeklyRestoreDrill": {
+    "enabled": true,
+    "cronUtc": "0 5 * * 0",
+    "stagingBranchPrefix": "staging-restore-drill-",
+    "deleteStagingBranchAfterChecks": true,
+    "requiredIntegrityChecks": [
+      "schema_migrations_complete",
+      "core_tables_readable",
+      "escrow_85_15_split_invariant",
+      "rls_tenant_isolation_policies_present",
+      "automation_logs_continuity"
+    ]
+  }
+}

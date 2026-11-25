@@ -1,0 +1,94 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "framework": "vite",
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "git": {
+    "deploymentEnabled": {
+      "main": true
+    }
+  },
+  "github": {
+    "enabled": true,
+    "autoAlias": true,
+    "silent": false
+  },
+  "headers": [
+    {
+      "source": "/sw.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" },
+        { "key": "Service-Worker-Allowed", "value": "/" }
+      ]
+    },
+    {
+      "source": "/workbox-(.*)\\.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/manifest.json",
+      "headers": [
+        { "key": "Content-Type", "value": "application/manifest+json; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/api/health(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "X-Security-Plane", "value": "user" },
+        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" }
+      ]
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/admin/:path*",
+      "destination": "https://admin.dutchkemventures.com/admin/:path*",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://api.dutchkemventures.com/api/:path*"
+    },
+    {
+      "source": "/((?!api/|assets/|sw\\.js|workbox-|manifest\\.json|pwa-|offline\\.html).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/curriculum-sync",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/seo-weekly",
+      "schedule": "0 3 * * 0"
+    },
+    {
+      "path": "/api/cron/qa-recompute",
+      "schedule": "0 4 * * 1"
+    },
+    {
+      "path": "/api/cron/restore-drill",
+      "schedule": "0 5 * * 0"
+    },
+    {
+      "path": "/api/cron/backup-monitor",
+      "schedule": "0 */6 * * *"
+    }
+  ]
+}

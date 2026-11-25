@@ -1,0 +1,49 @@
+name: Weekly Backup Restore Drill & 24h Freshness Monitor
+
+on:
+  schedule:
+    # Weekly Sunday 05:00 UTC: Restore latest backup to staging DB, run integrity checks, delete staging DB
+    - cron: "0 5 * * 0"
+    # Every 6 hours: Alert admin if backup has not run in 24 hours
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Drill mode (full_drill | freshness_only)"
+        required: false
+        default: "full_drill"
+
+jobs:
+  backup-recovery-verification:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Run Weekly Restore Drill & Staging Teardown
+        if: ${{ github.event.schedule == '0 5 * * 0' || github.event.inputs.mode != 'freshness_only' }}
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+          SLACK_SECURITY_WEBHOOK_URL: ${{ secrets.SLACK_SECURITY_WEBHOOK_URL }}
+        run: |
+          node scripts/weekly-restore-drill.mjs --json
+
+      - name: Check 24h Backup Freshness & Trigger Remote Watchdog
+        env:
+          TARGET_URL: ${{ secrets.BACKEND_PRODUCTION_URL || 'https://api.dutchkemventures.com' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SLACK_SECURITY_WEBHOOK_URL: ${{ secrets.SLACK_SECURITY_WEBHOOK_URL }}
+        run: |
+          node scripts/weekly-restore-drill.mjs --check-freshness
+          if [ -n "${CRON_SECRET}" ]; then
+            curl -sfS -X POST "${TARGET_URL}/api/cron/backup-monitor" \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
+              -H "Content-Type: application/json" \
+              -d '{"triggerSource":"github_actions"}'
+          fi

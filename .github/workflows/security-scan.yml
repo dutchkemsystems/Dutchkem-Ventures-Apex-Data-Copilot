@@ -1,0 +1,114 @@
+name: Weekly Sunday 2 AM UTC Supply-Chain Security Scan
+
+on:
+  schedule:
+    # Every Sunday at 02:00 UTC
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  weekly-audit-sweep:
+    name: Weekly npm audit + pip-audit + Snyk Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Weekly npm audit & pip-audit Sweep
+        id: audits
+        run: |
+          if [ ! -f package-lock.json ]; then
+            npm i --package-lock-only --ignore-scripts --no-audit
+          fi
+          set +e
+          npm audit --audit-level=moderate --json > weekly-npm-audit.json
+          NPM_EXIT=$?
+          python -m pip install --upgrade pip pip-audit
+          pip-audit -r phase13_architecture/backend/requirements.txt --format json --output weekly-pip-audit.json
+          PIP_EXIT=$?
+          set -e
+
+          NPM_CRITICAL=$(node -e '
+            const fs = require("fs");
+            const r = JSON.parse(fs.readFileSync("weekly-npm-audit.json", "utf8"));
+            console.log(r.metadata?.vulnerabilities?.critical ?? 0);
+          ')
+          PIP_FINDINGS=$(python -c '
+          import json
+          with open("weekly-pip-audit.json") as f:
+              data = json.load(f)
+          print(sum(len(d.get("vulns", [])) for d in data.get("dependencies", [])))
+          ')
+
+          echo "npm_critical=$NPM_CRITICAL" >> "$GITHUB_OUTPUT"
+          echo "pip_findings=$PIP_FINDINGS" >> "$GITHUB_OUTPUT"
+          echo "npm_exit=$NPM_EXIT" >> "$GITHUB_OUTPUT"
+          echo "pip_exit=$PIP_EXIT" >> "$GITHUB_OUTPUT"
+
+      - name: Weekly Snyk Monitor & Vulnerability Test
+        id: snyk_weekly
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          SNYK_ORG: ${{ secrets.SNYK_ORG }}
+        run: |
+          if [ -z "$SNYK_TOKEN" ]; then
+            echo "snyk_status=skipped_missing_token" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          npm install -g snyk
+          set +e
+          snyk monitor --all-projects
+          snyk test --all-projects --severity-threshold=high --json > weekly-snyk-report.json
+          SNYK_EXIT=$?
+          set -e
+          echo "snyk_exit=$SNYK_EXIT" >> "$GITHUB_OUTPUT"
+          echo "snyk_status=$([ "$SNYK_EXIT" -eq 0 ] && echo clean || echo vulnerabilities_found)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Weekly Audit Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: weekly-security-scan-${{ github.run_id }}
+          path: |
+            weekly-npm-audit.json
+            weekly-pip-audit.json
+            weekly-snyk-report.json
+          retention-days: 90
+
+      - name: Send Weekly Security Digest & Alerts to Slack
+        if: env.SLACK_SECURITY_WEBHOOK_URL != ''
+        env:
+          SLACK_SECURITY_WEBHOOK_URL: ${{ secrets.SLACK_SECURITY_WEBHOOK_URL }}
+        run: |
+          curl -sS -X POST "$SLACK_SECURITY_WEBHOOK_URL" \
+            -H 'Content-Type: application/json' \
+            -d "{
+              \"text\": \"Weekly Security Scan (Sun 02:00 UTC): npm critical=${{ steps.audits.outputs.npm_critical }}, pip findings=${{ steps.audits.outputs.pip_findings }}, snyk=${{ steps.snyk_weekly.outputs.snyk_status }}\",
+              \"blocks\": [
+                {
+                  \"type\": \"header\",
+                  \"text\": { \"type\": \"plain_text\", \"text\": \"Dutchkem Apex Weekly Security Scan\" }
+                },
+                {
+                  \"type\": \"section\",
+                  \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Schedule:* Every Sunday 02:00 UTC\n*npm critical CVEs:* ${{ steps.audits.outputs.npm_critical }}\n*pip-audit findings:* ${{ steps.audits.outputs.pip_findings }}\n*Snyk status:* ${{ steps.snyk_weekly.outputs.snyk_status }}\n*Workflow Run:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\" }
+                }
+              ]
+            }"
+
+      - name: Fail Job if Critical CVEs Present
+        if: steps.audits.outputs.npm_critical != '0' || steps.audits.outputs.pip_findings != '0' || steps.snyk_weekly.outputs.snyk_status == 'vulnerabilities_found'
+        run: |
+          echo "Security findings detected during weekly Sunday 02:00 UTC sweep."
+          exit 1

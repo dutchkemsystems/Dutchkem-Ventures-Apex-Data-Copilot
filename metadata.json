@@ -1,0 +1,6 @@
+{
+  "name": "Dutchkem Ventures Apex Data Copilot",
+  "description": "Multi-tenant AI workforce orchestration platform with PostgreSQL Row-Level Security, white-label agency isolation, 80/20 escrow ledger, and role-aware Org Admin and Annotator dashboards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

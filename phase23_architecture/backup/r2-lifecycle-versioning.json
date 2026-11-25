@@ -1,0 +1,35 @@
+{
+  "provider": "cloudflare_r2",
+  "bucketName": "apex-media-vault",
+  "mediaPrefixes": [
+    "audio/",
+    "video/",
+    "qa-submissions/",
+    "certifications/"
+  ],
+  "versioning": {
+    "Status": "Enabled",
+    "MFADelete": "Disabled"
+  },
+  "lifecycleConfiguration": {
+    "Rules": [
+      {
+        "ID": "retain-noncurrent-audio-video-versions-90-days",
+        "Status": "Enabled",
+        "Filter": {
+          "Prefix": ""
+        },
+        "NoncurrentVersionExpiration": {
+          "NoncurrentDays": 90
+        },
+        "AbortIncompleteMultipartUpload": {
+          "DaysAfterInitiation": 7
+        }
+      }
+    ]
+  },
+  "awsCliVerificationCommands": [
+    "aws s3api put-bucket-versioning --bucket apex-media-vault --versioning-configuration Status=Enabled --endpoint-url https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
+    "aws s3api put-bucket-lifecycle-configuration --bucket apex-media-vault --lifecycle-configuration file://phase23_architecture/backup/r2-lifecycle-versioning.json --endpoint-url https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+  ]
+}

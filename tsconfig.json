@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    "module": "ESNext",
+    "types": ["vite/client", "vite-plugin-pwa/client"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "allowJs": true,
+    "jsx": "react-jsx",
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    },
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  },
+  "exclude": ["dist", "phase1_architecture", "phase2_architecture", "phase3_architecture", "phase4_architecture", "phase5_architecture", "phase6_architecture", "phase7_architecture", "phase8_architecture", "phase9_architecture", "phase10_architecture", "phase11_architecture", "phase12_architecture", "phase13_architecture", "phase14_architecture", "phase15_architecture", "phase16_architecture", "phase17_architecture", "phase18_architecture", "phase19_architecture", "phase20_architecture", "phase21_architecture", "phase22_architecture", "phase23_architecture"]
+}

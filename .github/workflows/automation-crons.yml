@@ -1,0 +1,47 @@
+name: Scheduled Automation Crons (Curriculum, Weekly SEO & QA Recompute)
+
+on:
+  schedule:
+    # Daily 2 AM UTC: Sync curriculum from all 6 sources, update DB, flag outdated plans
+    - cron: "0 2 * * *"
+    # Weekly Sunday 3 AM UTC: Generate 5 SEO articles and publish to /blog
+    - cron: "0 3 * * 0"
+    # Weekly Monday 4 AM UTC: Recompute freelancer QA scores and certifications
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Optional job override (curriculum-sync | seo-weekly | qa-recompute | all)"
+        required: false
+        default: "all"
+
+jobs:
+  run-scheduled-automation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Scheduled Cron Endpoint with 3x Retry & Backoff
+        env:
+          TARGET_URL: ${{ secrets.BACKEND_PRODUCTION_URL || 'https://api.dutchkemventures.com' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SCHEDULE_EXPR: ${{ github.event.schedule }}
+          MANUAL_JOB: ${{ github.event.inputs.job }}
+        run: |
+          set -euo pipefail
+          ENDPOINTS=""
+          if [ "$SCHEDULE_EXPR" = "0 2 * * *" ] || [ "$MANUAL_JOB" = "curriculum-sync" ]; then
+            ENDPOINTS="/api/cron/curriculum-sync"
+          elif [ "$SCHEDULE_EXPR" = "0 3 * * 0" ] || [ "$MANUAL_JOB" = "seo-weekly" ]; then
+            ENDPOINTS="/api/cron/seo-weekly"
+          elif [ "$SCHEDULE_EXPR" = "0 4 * * 1" ] || [ "$MANUAL_JOB" = "qa-recompute" ]; then
+            ENDPOINTS="/api/cron/qa-recompute"
+          else
+            ENDPOINTS="/api/cron/curriculum-sync /api/cron/seo-weekly /api/cron/qa-recompute"
+          fi
+
+          for ep in $ENDPOINTS; do
+            echo "Running cron endpoint: $TARGET_URL$ep"
+            curl -sfS -X POST "$TARGET_URL$ep" \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
+              -H "Content-Type: application/json" \
+              -d '{"triggerSource":"github_actions"}'
+          done

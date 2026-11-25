@@ -1,0 +1,130 @@
+name: Zero-Downtime Atomic & Rolling Deploy
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run db:migrate:check
+      - run: npm run build
+      - run: npm run audit:security
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e:mobile
+
+  preview-frontend-pr:
+    if: github.event_name == 'pull_request'
+    needs: verify-checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy User Frontend Preview URL (Vercel)
+        if: env.VERCEL_TOKEN != ''
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_USER_PROJECT_ID }}
+        run: |
+          npm install -g vercel
+          vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
+          vercel build --token="$VERCEL_TOKEN"
+          PREVIEW_URL=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
+          echo "Vercel PR Preview URL: $PREVIEW_URL"
+
+  deploy-backend-rolling:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: verify-checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rolling Backend Deploy & 30s /api/health Gate with Auto-Rollback
+        if: env.RAILWAY_TOKEN != ''
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          BACKEND_URL: ${{ secrets.BACKEND_PRODUCTION_URL }}
+          PREVIOUS_RAILWAY_DEPLOYMENT_ID: ${{ secrets.PREVIOUS_RAILWAY_DEPLOYMENT_ID }}
+        run: |
+          npm install -g @railway/cli
+          railway up --detach --service apex-data-copilot-backend
+          echo "Verifying /api/health continuously for 30 seconds before traffic drain completes..."
+          PASS_COUNT=0
+          for i in $(seq 1 6); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_URL/api/health" || echo "000")
+            if [ "$STATUS" != "200" ]; then
+              echo "Health check failed ($STATUS) during 30s soak window. Triggering auto-rollback..."
+              if [ -n "$PREVIOUS_RAILWAY_DEPLOYMENT_ID" ]; then
+                railway deployment rollback "$PREVIOUS_RAILWAY_DEPLOYMENT_ID" || true
+              fi
+              exit 1
+            fi
+            PASS_COUNT=$((PASS_COUNT + 1))
+            sleep 5
+          done
+          echo "Backend rolling deploy passed $PASS_COUNT consecutive 5s /api/health checks (30s soak)."
+          echo "Running 60s post-deploy 5xx (>1%) auto-rollback watchdog..."
+          if ! TARGET_URL="$BACKEND_URL" SOAK_SECONDS=60 node scripts/post-deploy-monitor.mjs; then
+            echo "Post-deploy 5xx SLO breached (>1% over 60s). Reverting to $PREVIOUS_RAILWAY_DEPLOYMENT_ID..."
+            if [ -n "$PREVIOUS_RAILWAY_DEPLOYMENT_ID" ]; then
+              railway deployment rollback "$PREVIOUS_RAILWAY_DEPLOYMENT_ID" || true
+            fi
+            exit 1
+          fi
+
+  deploy-user-frontend-atomic:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: deploy-backend-rolling
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Atomic User Frontend Production Deploy (Vercel)
+        if: env.VERCEL_TOKEN != ''
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_USER_PROJECT_ID }}
+        run: |
+          npm install -g vercel
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+          DEPLOY_URL=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$DEPLOY_URL/api/health/frontend" || echo "000")
+          if [ "$STATUS" != "200" ]; then
+            echo "Frontend health probe failed ($STATUS); rolling back Vercel alias..."
+            vercel rollback --yes --token="$VERCEL_TOKEN"
+            exit 1
+          fi
+
+  deploy-admin-blue-green:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: deploy-backend-rolling
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Isolated Blue-Green Admin Deploy (admin.dutchkemventures.com)
+        if: env.VERCEL_TOKEN != ''
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_ADMIN_PROJECT_ID }}
+        run: |
+          npm install -g vercel
+          cp vercel.admin.json vercel.json
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+          ADMIN_DEPLOY_URL=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          echo "Isolated Admin Blue-Green deployment promoted: $ADMIN_DEPLOY_URL"

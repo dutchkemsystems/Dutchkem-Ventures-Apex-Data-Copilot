@@ -1,0 +1,88 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: apex_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-apex_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_local_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-apex_copilot}
+    ports:
+      - "5432:5432"
+    volumes:
+      - apex_pg_data:/var/lib/postgresql/data
+      - ../phase1_architecture/backend/sql/001_enable_rls.sql:/docker-entrypoint-initdb.d/001_enable_rls.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-apex_admin} -d ${POSTGRES_DB:-apex_copilot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: apex_redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - apex_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: apex_fastapi
+    env_file:
+      - .env.example
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://USER:PASSWORD@HOST.neon.tech/neondb?sslmode=require}
+      REDIS_URL: ${REDIS_URL:-rediss://default:MY_UPSTASH_TOKEN@HOST.upstash.io:6379}
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-MY_NVIDIA_API_KEY}
+      KORA_SECRET_KEY: ${KORA_SECRET_KEY:-MY_KORA_SECRET_KEY}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: apex_celery_worker
+    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=info", "--concurrency=4"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://USER:PASSWORD@HOST.neon.tech/neondb?sslmode=require}
+      REDIS_URL: ${REDIS_URL:-rediss://default:MY_UPSTASH_TOKEN@HOST.upstash.io:6379}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    image: node:20-alpine
+    container_name: apex_nextjs
+    working_dir: /app
+    command: ["sh", "-c", "npm install && npm run dev"]
+    environment:
+      FASTAPI_BACKEND_URL: http://backend:8000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./nextjs:/app
+    depends_on:
+      - backend
+
+volumes:
+  apex_pg_data:
+  apex_redis_data:

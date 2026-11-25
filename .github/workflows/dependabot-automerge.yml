@@ -1,0 +1,93 @@
+name: Dependabot SemVer Policy & Auto-Merge
+
+on:
+  pull_request_target:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enforce-dependabot-policy:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Dependabot Metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Label Minor Updates (Require Review)
+        if: steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr edit "$PR_NUMBER" --add-label "needs-review"
+          gh pr comment "$PR_NUMBER" --body "### SemVer Policy: Minor Dependency Update
+          - **Update Type**: \`${{ steps.metadata.outputs.update-type }}\`
+          - **Policy**: Minor updates require explicit human code review plus passing CI + CVE security gates (\`npm audit\`, \`pip-audit\`, Snyk) before merge."
+
+      - name: Gate Major Updates (Require Manual Review + Staging Deploy)
+        if: steps.metadata.outputs.update-type == 'version-update:semver-major'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_USER_PROJECT_ID }}
+        run: |
+          gh pr edit "$PR_NUMBER" --add-label "major-upgrade,requires-staging-deploy,needs-manual-review"
+          STAGING_NOTE="Pending Vercel staging preview token configuration"
+          if [ -n "$VERCEL_TOKEN" ]; then
+            STAGING_NOTE="Staging preview verification triggered — inspect deployment health before approving."
+          fi
+          gh pr comment "$PR_NUMBER" --body "### SemVer Policy: Major Dependency Upgrade
+          - **Update Type**: \`${{ steps.metadata.outputs.update-type }}\`
+          - **Policy**: Major upgrades are blocked from auto-merge. **Manual engineering review + Staging Deploy verification** are mandatory.
+          - **Staging Status**: ${STAGING_NOTE}"
+
+  automerge-patch-after-checks:
+    needs: enforce-dependabot-policy
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Dependabot Metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Checkout & Run Patch Test Suite
+        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node.js for Patch Verification
+        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Verify Lint, Build & Critical Security Gate on Patch
+        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        run: |
+          npm ci || npm install --no-audit --no-fund
+          npm run lint
+          npm run build
+          if [ ! -f package-lock.json ]; then npm i --package-lock-only --ignore-scripts --no-audit; fi
+          npm audit --audit-level=critical
+
+      - name: Approve & Auto-Merge Safe Patch Update
+        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr edit "$PR_NUMBER" --add-label "automerge-patch"
+          gh pr review "$PR_NUMBER" --approve --body "Automated patch verification passed (lint, build, critical CVE gate). Enabling auto-merge."
+          gh pr merge "$PR_NUMBER" --auto --squash

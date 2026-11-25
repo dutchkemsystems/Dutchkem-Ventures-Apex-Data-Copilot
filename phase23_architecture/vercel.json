@@ -1,0 +1,41 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "framework": "nextjs",
+  "installCommand": "npm ci",
+  "buildCommand": "npm run lint && npm run build",
+  "git": {
+    "deploymentEnabled": {
+      "main": true
+    }
+  },
+  "headers": [
+    {
+      "source": "/sw.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" },
+        { "key": "Service-Worker-Allowed", "value": "/" }
+      ]
+    },
+    {
+      "source": "/api/health",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" }
+      ]
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/admin/:path*",
+      "destination": "https://admin.dutchkemventures.com/admin/:path*",
+      "permanent": false
+    }
+  ],
+  "crons": [
+    { "path": "/api/cron/curriculum-sync", "schedule": "0 2 * * *" },
+    { "path": "/api/cron/seo-weekly", "schedule": "0 3 * * 0" },
+    { "path": "/api/cron/qa-recompute", "schedule": "0 4 * * 1" },
+    { "path": "/api/cron/restore-drill", "schedule": "0 5 * * 0" },
+    { "path": "/api/cron/backup-monitor", "schedule": "0 */6 * * *" }
+  ]
+}

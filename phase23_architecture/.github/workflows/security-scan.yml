@@ -1,0 +1,30 @@
+name: Weekly Supply-Chain Security Scan (Sunday 2 AM UTC)
+on:
+  schedule:
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+
+jobs:
+  security-sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run npm audit + pip-audit + Snyk
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          SLACK_SECURITY_WEBHOOK_URL: ${{ secrets.SLACK_SECURITY_WEBHOOK_URL }}
+        run: |
+          if [ ! -f package-lock.json ]; then npm i --package-lock-only --ignore-scripts --no-audit; fi
+          npm audit --audit-level=critical
+          python -m pip install --upgrade pip pip-audit
+          pip-audit -r phase13_architecture/backend/requirements.txt --strict
+          if [ -n "$SNYK_TOKEN" ]; then
+            npm install -g snyk
+            snyk test --all-projects --severity-threshold=high
+          fi
