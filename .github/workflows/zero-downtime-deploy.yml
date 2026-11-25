@@ -14,7 +14,7 @@ jobs:
   verify-checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -32,7 +32,7 @@ jobs:
     needs: verify-checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Deploy User Frontend Preview URL (Vercel)
         if: env.VERCEL_TOKEN != ''
         env:
@@ -51,7 +51,7 @@ jobs:
     needs: verify-checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Rolling Backend Deploy & 30s /api/health Gate with Auto-Rollback
         if: env.RAILWAY_TOKEN != ''
         env:
@@ -90,7 +90,7 @@ jobs:
     needs: deploy-backend-rolling
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Atomic User Frontend Production Deploy (Vercel)
         if: env.VERCEL_TOKEN != ''
         env:
@@ -114,7 +114,7 @@ jobs:
     needs: deploy-backend-rolling
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Isolated Blue-Green Admin Deploy (admin.dutchkemventures.com)
         if: env.VERCEL_TOKEN != ''
         env:

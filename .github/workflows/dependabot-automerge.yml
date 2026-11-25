@@ -62,7 +62,7 @@ jobs:
 
       - name: Checkout & Run Patch Test Suite
         if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
