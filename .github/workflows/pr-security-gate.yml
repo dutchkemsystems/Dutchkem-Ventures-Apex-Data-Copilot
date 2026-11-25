@@ -36,7 +36,7 @@ jobs:
             echo "BLOCKED: Critical CVE found in npm dependency tree."
             exit 1
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: npm-audit-report
@@ -75,7 +75,7 @@ jobs:
             echo "BLOCKED: Critical CVE detected by pip-audit."
             exit 1
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: pip-audit-report
